@@ -52,6 +52,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/batiks/{batik}', [BatikController::class, 'update']);
     Route::patch('/batiks/{batik}', [BatikController::class, 'update']);
 
+    // ✅ Baris ini sudah dihapus karena merupakan kode Dart
+    // import 'package:servic'; 
+
     // Rute untuk menghapus data batik
     Route::delete('/batiks/{batik}', [BatikController::class, 'destroy']);
 

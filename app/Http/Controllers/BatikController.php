@@ -97,5 +97,41 @@ class BatikController extends Controller
         }
     }
     
-    // ... (metode show, update, dan destroy lainnya)
+    // ... (metode show, update, dan lainnya)
+
+    /**
+     * Menghapus batik dari riwayat.
+     */
+    public function destroy($id): JsonResponse
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        // Cari riwayat batik berdasarkan ID dan pastikan itu milik user yang sedang login
+        $batik = Batik::where('id', $id)->where('user_id', $user->id)->first();
+
+        if (!$batik) {
+            return response()->json(['message' => 'Riwayat tidak ditemukan.'], 404);
+        }
+
+        try {
+            // Hapus file gambar dari storage jika ada
+            if ($batik->path) {
+                Storage::delete($batik->path);
+            }
+            
+            // Hapus entri dari database
+            $batik->delete();
+
+            Log::info('Batik berhasil dihapus.', ['batik_id' => $batik->id, 'user_id' => $user->id]);
+
+            return response()->json(['message' => 'Riwayat berhasil dihapus.'], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Gagal menghapus batik: ' . $e->getMessage(), ['batik_id' => $id]);
+            return response()->json(['message' => 'Gagal menghapus riwayat.'], 500);
+        }
+    }
 }
