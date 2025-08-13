@@ -3,8 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BatikController;
-use App\Http\Controllers\AuthController; // 👈 Pastikan ini ada
-use App\Http\Controllers\CommentController; // Pastikan baris ini ada
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CommentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -41,20 +41,23 @@ Route::middleware('auth:sanctum')->group(function () {
     // Rute untuk logout user
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Rute untuk menyimpan data batik baru (membutuhkan user_id)
-    Route::post('/batiks/store', [BatikController::class, 'store']); // Tetap gunakan /batiks/store jika Anda suka
+    // ✅ RUTE UNTUK UPLOAD & KONTRIBUSI: Menggunakan rute yang sama untuk keduanya
+    // Rute untuk menyimpan data batik baru, termasuk dari halaman kontribusi
+    Route::post('/batiks/store', [BatikController::class, 'store']);
 
     // Rute untuk menampilkan data batik yang diunggah oleh user yang sedang login
-    Route::get('/my-batiks', [BatikController::class, 'myBatiks']);
+    Route::get('/histories', [BatikController::class, 'myBatiks']);
 
     // Rute untuk memperbarui data batik
     Route::put('/batiks/{batik}', [BatikController::class, 'update']);
-    Route::patch('/batiks/{batik}', [BatikController::class, 'update']); // Tetap sertakan patch jika Anda menggunakannya secara spesifik
+    Route::patch('/batiks/{batik}', [BatikController::class, 'update']);
 
     // Rute untuk menghapus data batik
     Route::delete('/batiks/{batik}', [BatikController::class, 'destroy']);
 
-     Route::post('/batik/{batik}/add-comment', [CommentController::class, 'store']);
-    Route::delete('/comment/remove/{comment}', [CommentController::class, 'destroy']);
+    // Rute untuk menambahkan komentar pada batik tertentu
+    Route::post('/batiks/{batik}/comments', [CommentController::class, 'store']);
 
+    // Rute untuk menghapus komentar
+    Route::delete('/comments/{comment}', [CommentController::class, 'destroy']);
 });
