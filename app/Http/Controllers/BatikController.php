@@ -13,6 +13,15 @@ use Illuminate\Support\Facades\Validator;
 class BatikController extends Controller
 {
     /**
+     * Menampilkan semua data batik (biasanya publik).
+     */
+    public function index(): JsonResponse
+    {
+        $batiks = Batik::all();
+        return response()->json(['batiks' => $batiks]);
+    }
+
+    /**
      * Menampilkan data batik yang diunggah user yang sedang login.
      */
     public function myBatiks(): JsonResponse
@@ -26,19 +35,21 @@ class BatikController extends Controller
     }
 
     /**
-     * Menyimpan data batik baru (Create)
+     * Menyimpan data batik baru (Create).
      */
     public function store(Request $request): JsonResponse
     {
         Log::info('Permintaan diterima untuk store batik.', $request->all());
 
         try {
-            // ✅ PERBAIKAN: Validasi yang disesuaikan untuk menangani hasil deteksi dan kontribusi
+            // Periksa apakah permintaan file ada sebelum validasi.
+            if (!$request->hasFile('image')) {
+                return response()->json(['error' => 'File gambar tidak ditemukan dalam permintaan.'], 422);
+            }
+            
             $validator = Validator::make($request->all(), [
                 'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
-                // ✅ Validasi untuk is_minangkabau_batik
                 'is_minangkabau_batik' => 'required|in:true,false',
-                // ✅ Validasi kondisional untuk kontribusi (batik_name & description wajib)
                 'batik_name' => 'required_if:is_minangkabau_batik,false|nullable|string|max:255',
                 'description' => 'required_if:is_minangkabau_batik,false|nullable|string',
                 'origin' => 'nullable|string|max:255',
@@ -59,15 +70,21 @@ class BatikController extends Controller
 
             $image = $request->file('image');
             $filename = time() . '_' . $image->getClientOriginalName();
+            
             $path = $image->storeAs('public/batik_images', $filename);
-            $imageUrl = Storage::url($path);
+            
+            if (!$path) {
+                Log::error('Operasi storeAs gagal.', ['filename' => $filename]);
+                return response()->json(['error' => 'Gagal menyimpan file gambar.'], 500);
+            }
+
+            $imageUrl = asset(Storage::url($path));
+            
             Log::info('File berhasil diunggah. Path: ' . $path . ' URL: ' . $imageUrl);
 
-            // Logika untuk menentukan nama dan deskripsi
             $batikName = $request->input('batik_name');
             $description = $request->input('description');
 
-            // Jika ini hasil deteksi dan bukan batik Minangkabau, berikan nilai default
             if (!$isMinangkabauBatik) {
                 $batikName = $batikName ?? 'Bukan Batik Minangkabau';
                 $description = $description ?? 'Gambar bukan motif batik Minangkabau.';
@@ -96,33 +113,46 @@ class BatikController extends Controller
             return response()->json(['error' => 'Terjadi kesalahan server.'], 500);
         }
     }
-    
-    // ... (metode show, update, dan lainnya)
+
+    /**
+     * Menampilkan satu data batik.
+     */
+    public function show(Batik $batik): JsonResponse
+    {
+        return response()->json(['data' => $batik]);
+    }
 
     /**
      * Menghapus batik dari riwayat.
      */
     public function destroy($id): JsonResponse
     {
+        Log::info('Permintaan diterima untuk menghapus batik.', ['batik_id' => $id]);
+
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        // Cari riwayat batik berdasarkan ID dan pastikan itu milik user yang sedang login
         $batik = Batik::where('id', $id)->where('user_id', $user->id)->first();
 
         if (!$batik) {
+            Log::warning('Percobaan menghapus riwayat yang tidak ditemukan.', ['batik_id' => $id, 'user_id' => $user->id]);
             return response()->json(['message' => 'Riwayat tidak ditemukan.'], 404);
         }
 
         try {
-            // Hapus file gambar dari storage jika ada
             if ($batik->path) {
-                Storage::delete($batik->path);
+                if (Storage::exists($batik->path)) {
+                    Storage::delete($batik->path);
+                    Log::info('File berhasil dihapus.', ['path' => $batik->path]);
+                } else {
+                    Log::warning('File tidak ditemukan di storage, hanya menghapus data dari database.', ['path' => $batik->path]);
+                }
+            } else {
+                Log::info('Tidak ada path file untuk dihapus. Menghapus data dari database.', ['batik_id' => $batik->id]);
             }
             
-            // Hapus entri dari database
             $batik->delete();
 
             Log::info('Batik berhasil dihapus.', ['batik_id' => $batik->id, 'user_id' => $user->id]);
