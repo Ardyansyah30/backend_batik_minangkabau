@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Exception;
 
 class BatikController extends Controller
 {
@@ -42,10 +43,11 @@ class BatikController extends Controller
         Log::info('Permintaan diterima untuk store batik.', $request->all());
 
         try {
-            // Periksa apakah permintaan file ada sebelum validasi.
             if (!$request->hasFile('image')) {
+                Log::error('File gambar tidak ditemukan dalam permintaan.');
                 return response()->json(['error' => 'File gambar tidak ditemukan dalam permintaan.'], 422);
             }
+            Log::debug('File image ditemukan di request.', ['file' => $request->file('image')]);
             
             $validator = Validator::make($request->all(), [
                 'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
@@ -70,16 +72,34 @@ class BatikController extends Controller
 
             $image = $request->file('image');
             $filename = time() . '_' . $image->getClientOriginalName();
-            
-            $path = $image->storeAs('public/batik_images', $filename);
+            Log::debug('Nama file yang akan disimpan', ['filename' => $filename]);
+
+            // Gunakan disk 'public' secara eksplisit untuk semua operasi
+            $disk = Storage::disk('public');
+            $directory = 'batik_images';
+
+            // Pastikan folder ada
+            if (!$disk->exists($directory)) {
+                $disk->makeDirectory($directory);
+                Log::info("Direktori '{$directory}' telah dibuat.");
+            }
+
+            // Cek apakah file sudah ada sebelum disimpan
+            if ($disk->exists($directory . '/' . $filename)) {
+                $filename = time() . '_' . uniqid() . '_' . $image->getClientOriginalName();
+                Log::info('Nama file diubah untuk menghindari duplikasi: ' . $filename);
+            }
+
+            Log::debug('Menyimpan file ke storage', ['path' => $directory . '/' . $filename]);
+            $path = $image->storeAs($directory, $filename, 'public');
+            Log::debug('Hasil storeAs', ['path' => $path, 'exists' => $disk->exists($path)]);
             
             if (!$path) {
                 Log::error('Operasi storeAs gagal.', ['filename' => $filename]);
                 return response()->json(['error' => 'Gagal menyimpan file gambar.'], 500);
             }
 
-            $imageUrl = asset(Storage::url($path));
-            
+            $imageUrl = $disk->url($path);
             Log::info('File berhasil diunggah. Path: ' . $path . ' URL: ' . $imageUrl);
 
             $batikName = $request->input('batik_name');
@@ -104,7 +124,7 @@ class BatikController extends Controller
             Log::info('Data batik berhasil disimpan. Batik ID: ' . $batik->id);
 
             return response()->json(['message' => 'Batik berhasil disimpan!', 'data' => $batik], 201);
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Error saat menyimpan batik: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -159,7 +179,7 @@ class BatikController extends Controller
 
             return response()->json(['message' => 'Riwayat berhasil dihapus.'], 200);
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             Log::error('Gagal menghapus batik: ' . $e->getMessage(), ['batik_id' => $id]);
             return response()->json(['message' => 'Gagal menghapus riwayat.'], 500);
         }
