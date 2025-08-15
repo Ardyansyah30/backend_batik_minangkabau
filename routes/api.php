@@ -41,7 +41,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // Rute untuk logout user
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // ✅ RUTE UNTUK UPLOAD & KONTRIBUSI: Menggunakan rute yang sama untuk keduanya
     // Rute untuk menyimpan data batik baru, termasuk dari halaman kontribusi
     Route::post('/batiks/store', [BatikController::class, 'store']);
 
@@ -52,11 +51,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/batiks/{batik}', [BatikController::class, 'update']);
     Route::patch('/batiks/{batik}', [BatikController::class, 'update']);
 
-    // ✅ Baris ini sudah dihapus karena merupakan kode Dart
-    // import 'package:servic'; 
-
-    // Rute untuk menghapus data batik
-    Route::delete('/batiks/{batik}', [BatikController::class, 'destroy']);
+    // Rute untuk menghapus data batik (PERBAIKAN DI SINI)
+    Route::delete('/batiks/{id}', [BatikController::class, 'destroy']); // Menggunakan {id} untuk konsistensi
 
     // Rute untuk menambahkan komentar pada batik tertentu
     Route::post('/batiks/{batik}/comments', [CommentController::class, 'store']);
