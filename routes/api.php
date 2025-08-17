@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\BatikController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +25,10 @@ Route::get('/batiks', [BatikController::class, 'index']);
 
 // Rute untuk menampilkan satu data batik (juga bisa publik agar bisa dilihat semua orang)
 Route::get('/batiks/{batik}', [BatikController::class, 'show']);
+
+// Rute lupa password
+Route::post('/forgot-password', [ForgotPasswordController::class, 'sendResetLinkEmail']);
+Route::post('/reset-password', [ResetPasswordController::class, 'reset']);
 
 
 /*
