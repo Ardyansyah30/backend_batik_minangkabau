@@ -57,8 +57,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/batiks/{batik}', [BatikController::class, 'update']);
     Route::patch('/batiks/{batik}', [BatikController::class, 'update']);
 
-    // Rute untuk menghapus data batik (PERBAIKAN DI SINI)
-    Route::delete('/batiks/{id}', [BatikController::class, 'destroy']); // Menggunakan {id} untuk konsistensi
+    // Rute untuk menghapus data batik individual
+    Route::delete('/batiks/{id}', [BatikController::class, 'destroy']); 
+
+    // BARU: Rute untuk menghapus SEMUA riwayat batik yang diunggah oleh user yang sedang login
+    Route::delete('/histories/clear-all', [BatikController::class, 'deleteAllBatiks']);
 
     // Rute untuk menambahkan komentar pada batik tertentu
     Route::post('/batiks/{batik}/comments', [CommentController::class, 'store']);
