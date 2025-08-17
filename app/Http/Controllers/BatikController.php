@@ -108,7 +108,9 @@ class BatikController extends Controller
 
             Log::debug('Menyimpan file ke storage', ['path' => $directory . '/' . $filename]);
             $path = $image->storeAs($directory, $filename, 'public');
-            Log::debug('Hasil storeAs', ['path' => $path, 'exists' => $disk->exists($path)]);
+            // Pastikan hanya menyimpan nama folder dan file, tanpa prefix 'public/'
+            $dbPath = $directory . '/' . $filename;
+            Log::debug('Hasil storeAs', ['path' => $path, 'dbPath' => $dbPath, 'exists' => $disk->exists($path)]);
             
             if (!$path) {
                 Log::error('Operasi storeAs gagal.', ['filename' => $filename]);
@@ -130,7 +132,7 @@ class BatikController extends Controller
             $batik = Batik::create([
                 'user_id' => Auth::id(),
                 'filename' => $filename,
-                'path' => $path,
+                'path' => $dbPath, // <--- hanya batik_images/namafile.jpg
                 'original_name' => $image->getClientOriginalName(),
                 'is_minangkabau_batik' => $isMinangkabauBatik,
                 'batik_name' => $batikName,
