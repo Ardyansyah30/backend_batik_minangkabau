@@ -14,12 +14,15 @@ use Exception;
 class BatikController extends Controller
 {
     /**
-     * Menampilkan semua data batik (biasanya publik).
+     * Menampilkan semua data batik (biasanya publik) dengan URL gambar.
      */
     public function index(): JsonResponse
     {
         try {
-            $batiks = Batik::all();
+            $batiks = Batik::all()->map(function ($batik) {
+                $batik->image_url = $batik->path ? Storage::url($batik->path) : null;
+                return $batik;
+            });
             return response()->json(['batiks' => $batiks]);
         } catch (Exception $e) {
             Log::error('Error saat mengambil data batik: ' . $e->getMessage(), [
@@ -32,7 +35,7 @@ class BatikController extends Controller
     }
 
     /**
-     * Menampilkan data batik yang diunggah user yang sedang login.
+     * Menampilkan data batik yang diunggah user yang sedang login dengan URL gambar.
      */
     public function myBatiks(): JsonResponse
     {
@@ -42,7 +45,10 @@ class BatikController extends Controller
         }
 
         try {
-            $batiks = $user->batiks()->get();
+            $batiks = $user->batiks()->get()->map(function ($batik) {
+                $batik->image_url = $batik->path ? Storage::url($batik->path) : null;
+                return $batik;
+            });
             return response()->json(['batiks' => $batiks]);
         } catch (Exception $e) {
             Log::error('Error saat mengambil riwayat batik: ' . $e->getMessage(), [
@@ -71,8 +77,8 @@ class BatikController extends Controller
             $validator = Validator::make($request->all(), [
                 'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:10240',
                 'is_minangkabau_batik' => 'required|in:true,false',
-                'batik_name' => 'required_if:is_minangkabau_batik,false|nullable|string|max:255',
-                'description' => 'required_if:is_minangkabau_batik,false|nullable|string',
+                'batik_name' => 'required_if:is_minangkabau_batik,true|nullable|string|max:255',
+                'description' => 'required_if:is_minangkabau_batik,true|nullable|string',
                 'origin' => 'nullable|string|max:255',
             ]);
 
@@ -80,10 +86,11 @@ class BatikController extends Controller
                 Log::error('Validasi gagal.', ['errors' => $validator->errors()]);
                 return response()->json(['errors' => $validator->errors()], 422);
             }
-            
+
             // Logika menyimpan file
             $file = $request->file('image');
             $filename = time() . '_' . $file->getClientOriginalName();
+            // Menggunakan Storage::disk('public')->putFileAs() untuk path yang lebih andal
             $path = $file->storeAs('batik_images', $filename, 'public');
 
             if (!$path) {
@@ -93,9 +100,12 @@ class BatikController extends Controller
 
             // Menentukan nilai berdasarkan is_minangkabau_batik
             $isMinangkabauBatik = $request->input('is_minangkabau_batik') === 'true';
-            $batikName = $isMinangkabauBatik ? $request->input('batik_name') : ($request->input('batik_name') ?? 'Bukan Batik Minangkabau');
-            $description = $isMinangkabauBatik ? $request->input('description') : ($request->input('description') ?? 'Gambar bukan motif batik Minangkabau.');
-
+            
+            // Atur nama dan deskripsi default jika bukan batik Minangkabau
+            $batikName = $isMinangkabauBatik ? $request->input('batik_name') : 'Bukan Batik Minangkabau';
+            $description = $isMinangkabauBatik ? $request->input('description') : 'Gambar bukan motif batik Minangkabau.';
+            $origin = $isMinangkabauBatik ? $request->input('origin') : 'N/A';
+            
             // Membuat entri baru di database
             $batik = Batik::create([
                 'user_id' => Auth::id(),
@@ -105,12 +115,15 @@ class BatikController extends Controller
                 'is_minangkabau_batik' => $isMinangkabauBatik,
                 'batik_name' => $batikName,
                 'description' => $description,
-                'origin' => $request->input('origin'),
+                'origin' => $origin,
             ]);
+
+            // Tambahkan URL gambar ke respons
+            $batik->image_url = Storage::url($batik->path);
 
             Log::info('Data batik berhasil disimpan. Batik ID: ' . $batik->id);
             return response()->json(['message' => 'Batik berhasil disimpan!', 'data' => $batik], 201);
-            
+
         } catch (Exception $e) {
             Log::error('Error saat menyimpan batik: ' . $e->getMessage(), [
                 'file' => $e->getFile(),
@@ -120,60 +133,57 @@ class BatikController extends Controller
             return response()->json(['error' => 'Terjadi kesalahan server.'], 500);
         }
     }
-    
+
     /**
-     * Menampilkan satu data batik (Read).
+     * Menampilkan satu data batik (Read) dengan URL gambar.
      */
     public function show(Batik $batik): JsonResponse
     {
+        $batik->image_url = $batik->path ? Storage::url($batik->path) : null;
         return response()->json(['data' => $batik]);
     }
-    
+
     /**
      * Menghapus data batik (Delete).
      */
     public function destroy($id): JsonResponse
     {
         Log::info('Permintaan diterima untuk menghapus batik.', ['batik_id' => $id]);
-    
+
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-    
+
         $batik = Batik::where('id', $id)->where('user_id', $user->id)->first();
-    
+
         if (!$batik) {
             Log::warning('Percobaan menghapus riwayat yang tidak ditemukan.', ['batik_id' => $id, 'user_id' => $user->id]);
             return response()->json(['message' => 'Riwayat tidak ditemukan.'], 404);
         }
-    
+
         try {
-            if ($batik->path) {
-                if (Storage::exists($batik->path)) {
-                    Storage::delete($batik->path);
-                    Log::info('File berhasil dihapus.', ['path' => $batik->path]);
-                } else {
-                    Log::warning('File tidak ditemukan di storage, hanya menghapus data dari database.', ['path' => $batik->path]);
-                }
+            if ($batik->path && Storage::disk('public')->exists($batik->path)) {
+                Storage::disk('public')->delete($batik->path);
+                Log::info('File berhasil dihapus.', ['path' => $batik->path]);
             } else {
-                Log::info('Tidak ada path file untuk dihapus. Menghapus data dari database.', ['batik_id' => $batik->id]);
+                Log::warning('File tidak ditemukan di storage, hanya menghapus data dari database.', ['path' => $batik->path]);
             }
-            
+
             $batik->delete();
-    
+
             Log::info('Batik berhasil dihapus.', ['batik_id' => $batik->id, 'user_id' => $user->id]);
-    
+
             return response()->json(['message' => 'Riwayat berhasil dihapus.'], 200);
-    
+
         } catch (Exception $e) {
             Log::error('Gagal menghapus batik: ' . $e->getMessage(), ['batik_id' => $id]);
             return response()->json(['message' => 'Gagal menghapus riwayat.'], 500);
         }
     }
-    
+
     /**
-     * Memperbarui data batik (Update).
+     * Memperbarui data batik (Update) dan gambar baru.
      */
     public function update(Request $request, Batik $batik): JsonResponse
     {
@@ -188,15 +198,11 @@ class BatikController extends Controller
             // Aturan validasi
             $rules = [
                 'is_minangkabau_batik' => 'sometimes|in:true,false',
-                'batik_name' => 'required_if:is_minangkabau_batik,false|nullable|string|max:255',
-                'description' => 'required_if:is_minangkabau_batik,false|nullable|string',
+                'batik_name' => 'required_if:is_minangkabau_batik,true|nullable|string|max:255',
+                'description' => 'required_if:is_minangkabau_batik,true|nullable|string',
                 'origin' => 'nullable|string|max:255',
+                'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:10240',
             ];
-            
-            // Tambahkan validasi gambar hanya jika ada file baru diunggah
-            if ($request->hasFile('image')) {
-                $rules['image'] = 'sometimes|image|mimes:jpeg,png,jpg,gif|max:10240';
-            }
 
             $validator = Validator::make($request->all(), $rules);
 
@@ -208,8 +214,8 @@ class BatikController extends Controller
             // Proses unggahan gambar baru
             if ($request->hasFile('image')) {
                 // Hapus gambar lama jika ada
-                if ($batik->path && Storage::exists($batik->path)) {
-                    Storage::delete($batik->path);
+                if ($batik->path && Storage::disk('public')->exists($batik->path)) {
+                    Storage::disk('public')->delete($batik->path);
                 }
 
                 $file = $request->file('image');
@@ -223,8 +229,11 @@ class BatikController extends Controller
                 ]);
             }
 
-            // Perbarui data teks
-            $batik->update($request->except(['image']));
+            // Perbarui data teks, tambahkan origin jika ada
+            $batik->update($request->except('image'));
+            
+            // Tambahkan URL gambar ke respons
+            $batik->image_url = Storage::url($batik->path);
 
             Log::info('Batik berhasil diperbarui.', ['batik_id' => $batik->id]);
 
@@ -235,7 +244,7 @@ class BatikController extends Controller
             return response()->json(['message' => 'Gagal memperbarui batik.'], 500);
         }
     }
-    
+
     /**
      * Menghapus semua riwayat batik yang diunggah oleh user yang sedang login.
      */
@@ -254,8 +263,8 @@ class BatikController extends Controller
             }
 
             foreach ($batiks as $batik) {
-                if ($batik->path && Storage::exists($batik->path)) {
-                    Storage::delete($batik->path);
+                if ($batik->path && Storage::disk('public')->exists($batik->path)) {
+                    Storage::disk('public')->delete($batik->path);
                     Log::info('File riwayat berhasil dihapus.', ['path' => $batik->path]);
                 }
             }
